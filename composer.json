@@ -1,0 +1,16 @@
+{
+	"name": "silverstripe/typo3importer",
+	"description": "Imports typo3 uncompressed XML exported files in to Silverstripe sitetree and content" ,
+	"type": "silverstripe-module",
+	"keywords": ["silverstripe", "import", "typo3", "xml"],
+	"authors": [
+		{
+			"name": "Shoaib Ali",
+			"email": "shoaib@catalyst.net.nz"
+		}
+	],
+	"require":
+	{
+		"silverstripe/framework": "2.4,~3.0"
+	}
+}
