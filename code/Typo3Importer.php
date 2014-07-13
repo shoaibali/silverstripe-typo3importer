@@ -183,7 +183,7 @@ HTML;
 								$newPage->Title = $title;
 								$newPage->Content = ( isset($description) )? $description : "";
 								$newPage->URLSegment = NULL;
-								
+
 								// Set parent based on parentRefs;
 								if($level > 0) $newPage->ParentID = $parentRefs[$level-1];
 
@@ -197,7 +197,7 @@ HTML;
 								 $newPage->write();
 								 $newPage->publish('Stage', 'Live');
 
-							 	// Populate parentRefs with the most recent page at every level.   Necessary to build tree
+									// Populate parentRefs with the most recent page at every level.   Necessary to build tree
 								$parentRefs[$level] = $newPage->ID;
 
 								// Remove no-longer-relevant children from the parentRefs.  Allows more graceful acceptance of files
@@ -225,7 +225,6 @@ HTML;
 	}
 
 	private static function getTitle($node, $xml){
-	  //$title_xpath = "/T3RecordDocument/records/tablerow[@index='pages:" . (string) $node->uid . "']/fieldlist/field[@index='title']";
 	  $title_xpath = "/T3RecordDocument//records/table/rec[@index='" . (string) $node->uid . "']/title";
 	  $title = "";
 	  $node_uid = (string)$node->uid;
