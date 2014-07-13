@@ -76,21 +76,30 @@ HTML;
 		));
 	}
 	
-	function bulkimport($data, $form) {
+	function bulkimport($data) {
 
 		
 		Versioned::reading_stage('Stage');
+		
+		$files = array();
 
-		$folder = Folder::find('typo3import');
-		$files = $folder->Children();
+		if(!SapphireTest::is_running_test()) {
+			$folder = Folder::find('typo3import');
+			$children = $folder->Children();
+			foreach( $children as $child )
+				$files []= $child->getFullPath();
+		} else {
+				$files = $data["files"];
+		}
 
 		foreach($files as $file) {
-		
 			$parentRefs = array();
 
-			$xml = simplexml_load_file($file->getFullPath());
+			$xml = simplexml_load_file($file);
 
-			echo "Procesing file => " . $file->getFullPath()	. PHP_EOL . "<br/>";
+
+			if(!SapphireTest::is_running_test())
+				echo "Procesing file => " . $file	. PHP_EOL . "<br/>";
 
 			$root_tree = $xml->header->pagetree->node;
 			$site_tree = array();
@@ -104,8 +113,13 @@ HTML;
 			$parentRefs = array(); // array to store parent id references
 
 			$iterator = new RecursiveArrayIterator(array_filter($site_tree)); 
-			iterator_apply($iterator, $this->migrate($iterator, $level, $count, $parentRefs)); 
+			//iterator_apply($iterator, self::migrate($iterator, $level, $count, $parentRefs); 
+			self::migrate($iterator, $level, $count, $parentRefs); 
 
+			// cleanup memory
+			unset($iterator);
+			unset($site_tree);
+			unset($parentRefs);
 		}
 		
 		//Director::redirect($this->Link() . 'complete');		
@@ -167,7 +181,7 @@ HTML;
 
 								$newPage = new Page();
 								$newPage->Title = $title;
-								$newPage->Content = $description;
+								$newPage->Content = ( isset($description) )? $description : "";
 								$newPage->URLSegment = NULL;
 								
 								// Set parent based on parentRefs;
@@ -190,7 +204,8 @@ HTML;
 								// with errors
 								for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
-								echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+								if(!SapphireTest::is_running_test())
+									echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
 								// Memory cleanup
@@ -210,13 +225,14 @@ HTML;
 	}
 
 	private static function getTitle($node, $xml){
-	  $title_xpath = "/T3RecordDocument/records/tablerow[@index='pages:" . (string) $node->uid . "']/fieldlist/field[@index='title']";
+	  //$title_xpath = "/T3RecordDocument/records/tablerow[@index='pages:" . (string) $node->uid . "']/fieldlist/field[@index='title']";
+	  $title_xpath = "/T3RecordDocument//records/table/rec[@index='" . (string) $node->uid . "']/title";
 	  $title = "";
 	  $node_uid = (string)$node->uid;
 
 	  if(!empty($node_uid)){
 	   $title = $xml->xpath($title_xpath);
-	   $title = (string)$title[0];
+	   $title = (string) $title[0];
 	  }
 
 	  return $title;

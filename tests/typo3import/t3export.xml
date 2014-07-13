@@ -1,0 +1,164 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<T3RecordDocument>
+	<header type="array">
+		<charset>utf-8</charset>
+		<XMLversion>1.0</XMLversion>
+		<meta type="array">
+			<title></title>
+			<description></description>
+			<notes></notes>
+			<packager_username>shoaib</packager_username>
+			<packager_name>Shoaib Ali</packager_name>
+			<packager_email>shoaib@catalyst.net</packager_email>
+			<TYPO3_version>4.5.29</TYPO3_version>
+			<created>Monday 23. June 2014</created>
+		</meta>
+		<static_tables index="relStaticTables" type="array">
+			<tablename index="0">_ALL</tablename>
+		</static_tables>
+		<excludeMap type="array">
+		</excludeMap>
+		<softrefCfg type="array">
+		</softrefCfg>
+		<extensionDependencies type="array">
+		</extensionDependencies>
+		<pagetree type="array">
+			<node index="1" type="array">
+				<uid>1</uid>
+				<node index="subrow" type="array">
+					<node index="2" type="array">
+						<uid>2</uid>
+						<node index="subrow" type="array">
+							<node index="3" type="array">
+								<uid>3</uid>
+							</node>
+							<node index="4" type="array">
+								<uid>4</uid>
+								<node index="subrow" type="array">
+									<node index="5" type="array">
+										<uid>5</uid>
+									</node>
+								</node>
+							</node>
+						</node>
+					</node>
+				</node>
+			</node>
+		</pagetree>
+
+
+		<records type="array">
+			<table index="pages" type="array">
+				<rec index="1" type="array">
+					<uid>1</uid>
+					<pid>10000</pid>
+					<title>Title 1</title>
+					<size>0</size>
+					<relations index="rels" type="array">
+					</relations>
+					<softrefs type="array">
+					</softrefs>
+				</rec>
+
+				<rec index="2" type="array">
+					<uid>2</uid>
+					<pid>1</pid>
+					<title>Title 2</title>
+					<size>0</size>
+					<relations index="rels" type="array">
+					</relations>
+					<softrefs type="array">
+					</softrefs>
+				</rec>
+
+				<rec index="3" type="array">
+					<uid>3</uid>
+					<pid>2</pid>
+					<title>Title 3</title>
+					<size>0</size>
+					<relations index="rels" type="array">
+					</relations>
+					<softrefs type="array">
+					</softrefs>
+				</rec>
+
+				<rec index="4" type="array">
+					<uid>4</uid>
+					<pid>3</pid>
+					<title>Title 4</title>
+					<size>0</size>
+					<relations index="rels" type="array">
+					</relations>
+					<softrefs type="array">
+					</softrefs>
+				</rec>
+
+				<rec index="5" type="array">
+					<uid>5</uid>
+					<pid>4</pid>
+					<title>Title 5</title>
+					<size>0</size>
+					<relations index="rels" type="array">
+					</relations>
+					<softrefs type="array">
+					</softrefs>
+				</rec>
+
+			</table>
+		</records>
+	</header>
+
+	<records type="array">
+		<tablerow index="pages:1" type="array">
+			<fieldlist index="data" type="array">
+				<field index="uid">1</field>
+				<field index="pid">100000</field>
+				<field index="description">Description 1</field>
+			</fieldlist>
+			<related index="rels" type="array">
+			</related>
+		</tablerow>
+
+		<tablerow index="pages:2" type="array">
+			<fieldlist index="data" type="array">
+				<field index="uid">2</field>
+				<field index="pid">1</field>
+				<field index="description">Description 2</field>
+			</fieldlist>
+			<related index="rels" type="array">
+			</related>
+		</tablerow>
+
+		<tablerow index="pages:3" type="array">
+			<fieldlist index="data" type="array">
+				<field index="uid">3</field>
+				<field index="pid">2</field>
+				<field index="description">Description 3</field>
+			</fieldlist>
+			<related index="rels" type="array">
+			</related>
+		</tablerow>
+
+		<tablerow index="pages:4" type="array">
+			<fieldlist index="data" type="array">
+				<field index="uid">4</field>
+				<field index="pid">3</field>
+				<field index="description">Description 4</field>
+			</fieldlist>
+			<related index="rels" type="array">
+			</related>
+		</tablerow>
+
+		<tablerow index="pages:5" type="array">
+			<fieldlist index="data" type="array">
+				<field index="uid">5</field>
+				<field index="pid">4</field>
+				<field index="description">Description 5</field>
+			</fieldlist>
+			<related index="rels" type="array">
+			</related>
+		</tablerow>
+	</records>
+
+
+</T3RecordDocument>
