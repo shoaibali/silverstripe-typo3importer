@@ -15,7 +15,7 @@ Download or git clone this repository in to root of your SilverStripe installati
 
 Run /dev/build?flush=all
 
-Add the line before to file silverstripe_urls.acl: 
+Add the line below to file silverstripe_urls.acl: 
 ```
 #!php
 
