@@ -15,13 +15,12 @@ Download or git clone this repository in to root of your SilverStripe installati
 
 Run /dev/build?flush=all
 
-Add: 
+Add the line before to file silverstripe_urls.acl: 
 ```
 #!php
 
 ^\/Typo3Importer
 ```
- to file silverstripe_urls.acl
 
 Restart Squid3 and Apache: sudo service squid3 restart && sudo service apache2 restart
 
