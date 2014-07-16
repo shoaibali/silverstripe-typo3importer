@@ -139,6 +139,15 @@ HTML;
     $sub_tree['uid'] = $root_uid;
     $sub_tree['title'] = self::getTitle($root, $full_xml);
     $sub_tree['description'] = self::getDescription($root, $full_xml);
+    $content_array = self::getContent($root, $full_xml);
+    $content_string = "";
+
+    foreach($content_array as $c => $v) {
+    	$content_string .= "<h2>" . $v["header"] ."</h2>" . $v["bodytext"];
+    }
+
+    $sub_tree['content'] = $content_string;
+     // this (pid) must remain the very last thing that gets added to array
 		$sub_tree['pid'] = self::getPID($root, $full_xml);
 
     // If there is children
@@ -159,10 +168,10 @@ HTML;
     while ( $iterator->valid() ) { 
         if ( $iterator->hasChildren() ) {
             self::migrate($iterator->getChildren(), $level, $count, $parentRefs);
+
         } else { 
 
             if( ($iterator->current() !== "") ){
-
 
             	if( $iterator->key() == "uid" ) {
             		$uID = $iterator->current();
@@ -176,12 +185,19 @@ HTML;
             		$description = $iterator->current();
             	}
 
+            	if( $iterator->key() == "content" ){
+            		$bodytext = $iterator->current();
+            	}
+
             	if( $iterator->key() == "pid" ) {
+
             		$parentID = $iterator->current();
 
 								$newPage = new Page();
 								$newPage->Title = $title;
 								$newPage->Content = ( isset($description) )? $description : "";
+            		$newPage->Content .= ( isset($bodytext) ) ? $bodytext : "";
+
 								$newPage->URLSegment = NULL;
 
 								// Set parent based on parentRefs;
@@ -249,6 +265,32 @@ HTML;
 	  return $description;
 	}
 
+	private static function getContent($node, $xml){
+		$content_xpath = "/T3RecordDocument/header/pid_lookup/page_contents[@index='".(string) $node->uid . "']/table[@index='tt_content']/item";
+		$content = "";
+		$node_uid = (string) $node->uid;
+		$content_complete	 = array(); // this array will hold all item id's for their respective contents
+
+		// TODO maybe do some content processing here i.e remove or reconstruct links and strip html tags etc.
+		if(!empty($node_uid)){
+			$content = $xml->xpath($content_xpath);
+			foreach($content as $ck){ 
+
+				$header = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='header']");
+				$header = (string) $header[0];
+
+				$bodytext = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='bodytext']");
+				$bodytext = html_entity_decode( (string) $bodytext[0], ENT_QUOTES, "UTF-8");
+
+				$content_complete []= array("header" => $header,
+																		"bodytext" => $bodytext);
+
+			}
+		}
+
+		return $content_complete;
+
+	}
 
 	private static function getPID($node, $xml){
 	  $pid_xpath = "/T3RecordDocument/header/records/table/rec[@index='". (string) $node->uid . "']/pid";
