@@ -67,19 +67,37 @@ HTML;
 	}
 	
 	function Form() {
+		$deleteExistingCheckBox = new CheckboxField("DeleteExisting", "Clear out all existing Typo3 Imported content?");
+		$deleteExistingCheckBox->setValue(TRUE);
+
+		$publishAllCheckBox = new CheckboxField("PublishAll", "Publish everything after the import?");
+
+
+		// No need to publish if some are already.
+		if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
+			$publishAllCheckBox->setValue(TRUE);
+		
+
 		return new Form($this, "Form", new FieldList(
-			//new FileField("SourceFile", "Tab-delimited file"),
-			//new CheckboxField("DeleteExisting", "Clear out all existing content?"),
-			new CheckboxField("PublishAll", "Publish everything after the import?")
+			$deleteExistingCheckBox,
+			$publishAllCheckBox
 		), new FieldList(
 			new FormAction("bulkimport", "Being Migration")
 		));
 	}
 	
-	function bulkimport($data) {
+	function bulkimport($data, $form) {
 
-		
 		Versioned::reading_stage('Stage');
+
+    if(isset($data['DeleteExisting']) && $data['DeleteExisting']) {
+     // get all the Typo3Pages
+     $Typo3Pages = Typo3Page::get();
+     foreach($Typo3Pages as $Typo3Page){
+       $Typo3Page->delete();
+     }
+    }
+
 		
 		$files = array();
 
@@ -193,7 +211,10 @@ HTML;
 
             		$parentID = $iterator->current();
 
-								$newPage = new Page();
+								$newPage = new Typo3Page();
+								$newPage->IsTypo3 = TRUE;
+								$newPage->Typo3UID = $uID;
+								$newPage->Typo3PID = $parentID;
 								$newPage->Title = $title;
 								$newPage->Content = ( isset($description) )? $description : "";
             		$newPage->Content .= ( isset($bodytext) ) ? $bodytext : "";
@@ -210,8 +231,9 @@ HTML;
 
 
 								// Don't write the page until we have Title, Content and ParentID
-								 $newPage->write();
-								 $newPage->publish('Stage', 'Live');
+								$newPage->write();
+
+								if(isset($data['PublishAll']) && $data['PublishAll']) $newPage->publish('Stage', 'Live');
 
 									// Populate parentRefs with the most recent page at every level.   Necessary to build tree
 								$parentRefs[$level] = $newPage->ID;
