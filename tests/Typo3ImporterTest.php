@@ -22,7 +22,7 @@ class Typo3ImporterTest extends FunctionalTest {
 
     $files = array($file); // this can be more than one file hence an array
 
-    $importer->bulkimport(array("files" => $files));
+    $importer->bulkimport(array("files" => $files), null);
   
     $existing = DataObject::get_one('SiteTree', "\"Title\" = 'ShouldBeExisting'");
     $parent1 = DataObject::get_one('SiteTree', "\"Title\" = 'Title 1'");
