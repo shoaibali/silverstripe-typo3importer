@@ -71,11 +71,11 @@ HTML;
     $deleteExistingCheckBox->setValue(TRUE);
 
     $publishAllCheckBox = new CheckboxField("PublishAll", "Publish everything after the import?");
+    $publishAllCheckBox->setValue(TRUE);
 
 
     // No need to publish if some are already.
-    if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
-      $publishAllCheckBox->setValue(TRUE);
+    //if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
     
 
     return new Form($this, "Form", new FieldList(
@@ -88,19 +88,8 @@ HTML;
   
   function bulkimport($data, $form) {
 
-    // force version to be Stage
-    Versioned::reading_stage('Stage');
-
-    if(isset($data['DeleteExisting']) && $data['DeleteExisting']) {
-
-      Versioned::reading_stage('Live');
-      // get all the Typo3Pages
-      $Typo3Pages = Typo3Page::get();
-      foreach($Typo3Pages as $Typo3Page){
-        $Typo3Page->delete();
-      }
-
-    }
+    if(isset($data['DeleteExisting']) && $data['DeleteExisting'])
+      self::deleteAllTypo3Pages();
 
     $files = array();
 
@@ -125,7 +114,7 @@ HTML;
       $root_tree = $xml->header->pagetree->node;
       $site_tree = array();
 
-      $result = $this->buildTree($root_tree, $site_tree, $xml);
+      $result = self::buildTree($root_tree, $site_tree, $xml);
 
       $site_tree = array_pop($site_tree);
 
@@ -136,6 +125,11 @@ HTML;
       $iterator = new RecursiveArrayIterator(array_filter($site_tree)); 
       //iterator_apply($iterator, self::migrate($iterator, $level, $count, $parentRefs); 
       self::migrate($iterator, $level, $count, $parentRefs); 
+
+      // publish all pages
+      if( isset($data['PublishAll']) && $data['PublishAll'] ) {
+        self::publishAllTypo3Pages();
+      }
 
       // cleanup memory
       unset($iterator);
@@ -153,7 +147,31 @@ HTML;
     );
   }
 
-  function buildTree($root, &$site_tree, $full_xml) {
+  private static function publishAllTypo3Pages(){
+      Versioned::reading_stage('Stage');
+      $Typo3Pages = Typo3Page::get();
+      foreach($Typo3Pages as $Typo3Page){
+        $Typo3Page->publish('Stage', 'Live');
+      }
+
+  }
+  private static function deleteAllTypo3Pages(){
+      Versioned::reading_stage('Live');
+      // get all Live Typo3Page pages in Live mode and delete them
+      $Typo3Pages = Typo3Page::get();
+      foreach($Typo3Pages as $Typo3Page){
+        $Typo3Page->delete();
+      }
+      
+      Versioned::reading_stage('Stage');
+      // get all Live Typo3Page pages in Stage mode and delete them
+      $Typo3Pages = Typo3Page::get();
+      foreach($Typo3Pages as $Typo3Page){
+        $Typo3Page->delete();
+      }
+  }
+
+  private static function buildTree($root, &$site_tree, $full_xml) {
     $sub_tree = array();
     $root_uid = (string) $root->uid;
 
@@ -176,7 +194,7 @@ HTML;
     if (!empty($root->children()->node)) {
       foreach($root->children()->node as $child){
         $child_uid = (string) $child->uid;
-        $sub_tree['children'][$child_uid] = $this->buildTree($child, $site_tree, $full_xml);
+        $sub_tree['children'][$child_uid] = self::buildTree($child, $site_tree, $full_xml);
       }
 
       $site_tree[$root_uid] = $sub_tree;
@@ -242,9 +260,6 @@ HTML;
 
                 // Don't write the page until we have Title, Content and ParentID
                 $newPage->write();
-
-                //if(isset($data['PublishAll']) && $data['PublishAll']) 
-                $newPage->publish('Stage', 'Live');
 
                   // Populate parentRefs with the most recent page at every level.   Necessary to build tree
                 $parentRefs[$level] = $newPage->ID;
