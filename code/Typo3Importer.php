@@ -393,16 +393,12 @@ HTML;
         $orig_link_string = 'link ' . (string)$linkID;
         $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
         $content = str_replace($orig_link_string, $replace_link_string, $content);
-
-        echo "O: " . $orig_link_string . ' R:' . $replace_link_string . "<br/>" . PHP_EOL;
       }
 
       // replace all the closing link tags with a tags
       $content = str_replace('/link', '/a', $content);
-
-      //$Typo3Page->update(array("Content"=>$content, "Title"=>'Blah'));
+      $Typo3Page->Content = $content;
       $Typo3Page->write();
-      $Typo3Page->publish('Stage', 'Live');
     }
   }
 
