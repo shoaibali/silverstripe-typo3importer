@@ -131,6 +131,14 @@ HTML;
         self::publishAllTypo3Pages();
       }
 
+      // Rewrite Typo3 links into SS links
+      self::processLinks();
+
+      // publish all pages
+      if( isset($data['PublishAll']) && $data['PublishAll'] ) {
+        self::publishAllTypo3Pages();
+      }
+
       // cleanup memory
       unset($iterator);
       unset($site_tree);
@@ -370,4 +378,32 @@ HTML;
     return $pid;
   }
   
+  private static function processLinks(){
+    # Get all Typo3Pages
+    //Versioned::reading_stage('Live');
+    $Typo3Pages = Typo3Page::get();
+
+    foreach($Typo3Pages as $Typo3Page){
+      // echo $Typo3Page->Title . '</br>';
+      $content = $Typo3Page->Content;
+      // echo 'helo' . $Typo3Page->content;
+      preg_match_all('/link ([\d]+)/', $content , $matches);
+      foreach ($matches[1] as $linkID) {
+        $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
+        $orig_link_string = 'link ' . (string)$linkID;
+        $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+        $content = str_replace($orig_link_string, $replace_link_string, $content);
+
+        echo "O: " . $orig_link_string . ' R:' . $replace_link_string . "<br/>" . PHP_EOL;
+      }
+
+      // replace all the closing link tags with a tags
+      $content = str_replace('/link', '/a', $content);
+
+      //$Typo3Page->update(array("Content"=>$content, "Title"=>'Blah'));
+      $Typo3Page->write();
+      $Typo3Page->publish('Stage', 'Live');
+    }
+  }
+
 }
