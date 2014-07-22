@@ -164,6 +164,8 @@ HTML;
 
   }
   private static function deleteAllTypo3Pages(){
+
+      // TODO use Versioned::get_by_stage('MyClass', 'Live')->removeAll();
       Versioned::reading_stage('Live');
       // get all Live Typo3Page pages in Live mode and delete them
       $Typo3Pages = Typo3Page::get();
@@ -344,13 +346,21 @@ HTML;
           $bodytext = (string) $bodytext[0];
 
           // re-link images to /assets directory
-          if( (strpos($bodytext, "img")) ){
+          if( (strpos($bodytext, "img") !== FALSE) ){
             if( (strpos($bodytext, "###CMS_URL###") !== FALSE) ) {          
               $bodytext = str_replace("###CMS_URL###", "/assets/", $bodytext);
             } else {
               $bodytext = str_replace("fileadmin", "/assets/fileadmin/", $bodytext);
             }
           }
+
+          // re-link documents to /assets directory
+          // if( (strpos($bodytext, "link fileadmin") !== FALSE) ) {
+          //     $bodytext = str_replace("fileadmin", "/assets/fileadmin/", $bodytext);
+          //     $bodytext = str_replace("link", "a href='", $bodytext);
+          //     $bodytext = str_replace("&gt;", "'&gt;", $bodytext);
+          //     $bodytext = str_replace("/link", "/a", $bodytext);
+          // }
 
           $bodytext = html_entity_decode( (string) $bodytext, ENT_QUOTES, "UTF-8");
 
@@ -401,5 +411,8 @@ HTML;
       $Typo3Page->write();
     }
   }
+
+
+
 
 }
