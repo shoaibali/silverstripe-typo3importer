@@ -88,8 +88,8 @@ HTML;
   
   function bulkimport($data, $form) {
 
-    if(isset($data['DeleteExisting']) && $data['DeleteExisting'])
-      self::deleteAllTypo3Pages();
+     if(isset($data['DeleteExisting']) && $data['DeleteExisting'])
+       self::deleteAllTypo3Pages();
 
     $files = array();
 
@@ -345,24 +345,35 @@ HTML;
 
           $bodytext = (string) $bodytext[0];
 
-          // re-link images to /assets directory
-          if( (strpos($bodytext, "img") !== FALSE) ){
-            if( (strpos($bodytext, "###CMS_URL###") !== FALSE) ) {          
-              $bodytext = str_replace("###CMS_URL###", "/assets/", $bodytext);
-            } else {
-              $bodytext = str_replace("fileadmin", "/assets/fileadmin/", $bodytext);
-            }
+          // look for block quote pi_flexform
+          if( empty($bodytext) ){
+            $bodytext = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='pi_flexform']");
+            $bodytext = (string) $bodytext[0];
           }
 
-          // re-link documents to /assets directory
-          // if( (strpos($bodytext, "link fileadmin") !== FALSE) ) {
-          //     $bodytext = str_replace("fileadmin", "/assets/fileadmin/", $bodytext);
-          //     $bodytext = str_replace("link", "a href='", $bodytext);
-          //     $bodytext = str_replace("&gt;", "'&gt;", $bodytext);
-          //     $bodytext = str_replace("/link", "/a", $bodytext);
-          // }
 
           $bodytext = html_entity_decode( (string) $bodytext, ENT_QUOTES, "UTF-8");
+
+          // re-link images to /assets directory
+          preg_match('/<img[^>]*>/', $bodytext , $images);
+
+          if( !empty($images[0])) {
+            // rewrite the source of image relative to assets directory in SS
+            $imagepath = self::fixImagePath($images[0]);
+            $bodytext = str_replace($images[0], $imagepath, $bodytext);
+          }
+
+          // replace all ###CMS_URL###
+          $bodytext = str_replace("###CMS_URL###", "/", $bodytext);
+
+          // re-link documents to /assets directory
+          preg_match_all('/<link fileadmin[^>]*>(.*?)<\/link>/', $bodytext , $links);
+
+          if( !empty($links[0]) ){
+            $document_links = self::fixDocumentPath($links[0]);
+            $bodytext = str_replace($links[0], $document_links, $bodytext);
+          }
+
 
           $content_complete []= array("header" => $header,
                                       "bodytext" => $bodytext);
@@ -412,6 +423,37 @@ HTML;
     }
   }
 
+  private static function fixImagePath($img){
+    // if it starts with a / then its fine just do assets replacement
+    if( (strpos($img, 'src="/') !== FALSE) || (strpos($img, "src='/") !== FALSE) )
+      return str_replace('fileadmin', 'assets/fileadim', $img);
+  
+    // otherwise add a / to the path with silverstripe assets appended 
+    // are we using single quotes or double?
+    if( strpos($img, '"') !== FALSE )
+      $img = str_replace('src="', 'src="/assets/', $img); //double quotes
+
+    if( strpos($img, "'") !== FALSE )
+      $img = str_replace('src="', "src='/assets/", $img); //single quotes
+
+    return $img;
+  }
+
+  private static function fixDocumentPath($document_link){
+    // fix the links to be proper html a tags
+    $document_link = str_replace("<link", "<a", $document_link);
+    $document_link = str_replace("</link>", "</a>", $document_link);
+
+    foreach($document_link as $dl){
+      preg_match('/fileadmin[^>]*/', $dl , $document_path);
+      // TODO right now we are just doing href, this might need to be re-done using silverstripe
+      // File->ID instead which means this method will need to be altered and called in post 
+      // processing, for now href= links to documents should work.
+      $document_link = str_replace($document_path, 'href="/assets/'.$document_path[0].'"', $dl);
+    }
+    
+    return $document_link;
+  }
 
 
 
