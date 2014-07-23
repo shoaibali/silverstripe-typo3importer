@@ -32,6 +32,7 @@ HTML;
 
     // check directory exists
     if( $folder = Folder::find('typo3import') ){
+
       $msg .= <<<HTML
       <p>&#10004 Directory called typo3import found</p>
 HTML;
@@ -131,19 +132,20 @@ HTML;
         self::publishAllTypo3Pages();
       }
 
+      // cleanup memory
+      unset($iterator);
+      unset($site_tree);
+      unset($parentRefs);
+    }
+
       // Rewrite Typo3 links into SS links
-      self::processLinks();
+    self::processInternalLinks();
 
       // publish all pages
       if( isset($data['PublishAll']) && $data['PublishAll'] ) {
         self::publishAllTypo3Pages();
       }
 
-      // cleanup memory
-      unset($iterator);
-      unset($site_tree);
-      unset($parentRefs);
-    }
     
     //Director::redirect($this->Link() . 'complete');   
   }
@@ -211,8 +213,6 @@ HTML;
   }
 
   private static function migrate($iterator, $level, &$count, &$parentRefs) { 
-
-
     while ( $iterator->valid() ) { 
         if ( $iterator->hasChildren() ) {
             self::migrate($iterator->getChildren(), $level, $count, $parentRefs);
@@ -277,7 +277,7 @@ HTML;
                 for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
                 if(!SapphireTest::is_running_test())
-                  echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+                  // echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
                 // Memory cleanup
@@ -378,20 +378,27 @@ HTML;
     return $pid;
   }
   
-  private static function processLinks(){
+  private static function processInternalLinks(){
     # Get all Typo3Pages
     //Versioned::reading_stage('Live');
     $Typo3Pages = Typo3Page::get();
 
     foreach($Typo3Pages as $Typo3Page){
-      // echo $Typo3Page->Title . '</br>';
       $content = $Typo3Page->Content;
-      // echo 'helo' . $Typo3Page->content;
       preg_match_all('/link ([\d]+)/', $content , $matches);
+
+      if (count($matches[1]) !== 0) {
+        echo '</br>' .$Typo3Page->Title . '--' . '</br>' . PHP_EOL;
+      }
+
       foreach ($matches[1] as $linkID) {
         $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
         $orig_link_string = 'link ' . (string)$linkID;
         $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+        if (!$obj->ID) {
+          echo " $orig_link_string -- $replace_link_string" . '</br>' . PHP_EOL;
+        }
+
         $content = str_replace($orig_link_string, $replace_link_string, $content);
       }
 
