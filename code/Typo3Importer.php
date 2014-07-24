@@ -374,7 +374,6 @@ HTML;
             $bodytext = str_replace($links[0], $document_links, $bodytext);
           }
 
-
           $content_complete []= array("header" => $header,
                                       "bodytext" => $bodytext);
         }
@@ -408,19 +407,14 @@ HTML;
       $content = $Typo3Page->Content;
       preg_match_all('/link ([\d]+)/', $content , $matches);
 
-      if (count($matches[1]) !== 0) {
-        echo '</br>' .$Typo3Page->Title . '--' . '</br>' . PHP_EOL;
-      }
-
       foreach ($matches[1] as $linkID) {
         $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
-        $orig_link_string = 'link ' . (string)$linkID;
-        $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
-        if (!$obj->ID) {
-          echo " $orig_link_string -- $replace_link_string" . '</br>' . PHP_EOL;
+        // Skip links that are not in the SilverStripe
+        if (isset($obj)) {
+          $orig_link_string = 'link ' . (string)$linkID;
+          $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+          $content = str_replace($orig_link_string, $replace_link_string, $content);
         }
-
-        $content = str_replace($orig_link_string, $replace_link_string, $content);
       }
 
       // replace all the closing link tags with a tags
