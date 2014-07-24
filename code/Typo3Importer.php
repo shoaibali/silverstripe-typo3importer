@@ -138,13 +138,13 @@ HTML;
       unset($parentRefs);
     }
 
-      // Rewrite Typo3 links into SS links
+    // Rewrite Typo3 links into SS links
     self::processInternalLinks();
 
-      // publish all pages
-      if( isset($data['PublishAll']) && $data['PublishAll'] ) {
-        self::publishAllTypo3Pages();
-      }
+    // publish all pages
+    if( isset($data['PublishAll']) && $data['PublishAll'] ) {
+      self::publishAllTypo3Pages();
+    }
 
     
     //Director::redirect($this->Link() . 'complete');   
@@ -279,7 +279,7 @@ HTML;
                 for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
                 if(!SapphireTest::is_running_test())
-                  // echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+                   echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
                 // Memory cleanup
@@ -337,6 +337,9 @@ HTML;
         // we are going to skip all hidden content
         $hidden =  $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='hidden']");
 
+        // ctype can be {div, html, text, textpic, image, list, menu}
+        $ctype =  $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='CType']");
+
         if( !(string)$hidden[0] ) {
           $header = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='header']");
           $header = (string) $header[0];
@@ -344,11 +347,27 @@ HTML;
           $bodytext = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='bodytext']");
 
           $bodytext = (string) $bodytext[0];
+          $ctype = (string) $ctype[0];
 
           // look for block quote pi_flexform
           if( empty($bodytext) ){
-            $bodytext = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='pi_flexform']");
-            $bodytext = (string) $bodytext[0];
+            $pi_flexform = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='pi_flexform']");
+            $pi_flexform = (string) $pi_flexform[0];
+            if ( !empty($pi_flexform) ) {
+              $bodytext = self::fixQuoteText($pi_flexform);
+            }
+          }
+
+          if( $ctype == "image" ){
+            // get the path for image
+            $image_file_path = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='tx_emreferences_filereferences']");
+            $image_file_alt_text = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='altText']");
+            $image_file_caption = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='imagecaption']");
+
+            $bodytext = self::buildImageWithCaption((string) $image_file_path[0], 
+                                                    (string) $image_file_alt_text[0], 
+                                                    (string) $image_file_caption[0]);
+
           }
 
 
@@ -424,10 +443,57 @@ HTML;
     }
   }
 
+  private static function fixQuoteText($pi_flexform) {
+
+    $decoded_xhtml = html_entity_decode( $pi_flexform, ENT_QUOTES, "UTF-8");
+
+    $decoded_xhtml = str_replace("&", "&amp;", $decoded_xhtml);
+    $decoded_xhtml = str_replace("<br>", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("<br />", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("<ul>", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("</ul>", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("<li>", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("</li>", "", $decoded_xhtml);
+
+    $pi_flexform_xml = simplexml_load_string($decoded_xhtml);
+
+    // Lesson learned xpath is case sensative! /T3FlexForms/ is not the same as /t3flexforms/
+
+    $quote_heading = $pi_flexform_xml->xpath('/T3FlexForms/data/sheet/language/field[@index="heading"]/value');
+    $quote_heading = (empty($quote_heading))? "" : (string) $quote_heading[0];
+
+    $quote_text = $pi_flexform_xml->xpath('/T3FlexForms/data/sheet/language/field[@index="text"]/value');
+    $quote_text = (empty($quote_text))? "" : (string) $quote_text[0];
+
+    $quote_name = $pi_flexform_xml->xpath('/T3FlexForms/data/sheet/language/field[@index="name"]/value');
+    $quote_name = (empty($quote_name))? "" : (string) $quote_name[0];
+
+    $quote_occupation = $pi_flexform_xml->xpath('/T3FlexForms/data/sheet/language/field[@index="occupation"]/value');
+    $quote_occupation = (empty($quote_occupation))? "" : (string) $quote_occupation[0];
+
+    $quote_picture = $pi_flexform_xml->xpath('/T3FlexForms/data/sheet/language/field[@index="picture"]/value');
+
+    $quote_picture = (empty($quote_picture)) ? "" : self::fixQuoteImagePath( (string) $quote_picture[0], $quote_name);
+
+    // TODO there is also @index='otherlinkurl'
+
+    return $quote_picture . $quote_heading . $quote_text  . $quote_name . $quote_occupation;
+
+
+  }
+
+  private static function fixQuoteImagePath($image_path, $alt_text) {
+    return '<img src="/assets/fileadmin/'. $image_path . '" alt="' . $alt_text . '">';
+
+  }
+
   private static function fixImagePath($img){
+    
+    if ( strpos($img, 'assets') !== FALSE ) return $img; // already fixed
+
     // if it starts with a / then its fine just do assets replacement
     if( (strpos($img, 'src="/') !== FALSE) || (strpos($img, "src='/") !== FALSE) )
-      return str_replace('fileadmin', 'assets/fileadim', $img);
+      return str_replace('fileadmin', 'assets/fileadmin', $img);
   
     // otherwise add a / to the path with silverstripe assets appended 
     // are we using single quotes or double?
@@ -454,6 +520,10 @@ HTML;
     }
     
     return $document_link;
+  }
+
+  private static function buildImageWithCaption($img_path, $img_alt, $img_cap){
+    return '<img src="/fileadmin/' . $img_path . '" alt="'. $img_alt .'" /><div class="caption">' . $img_cap . '</div>';
   }
 
 
