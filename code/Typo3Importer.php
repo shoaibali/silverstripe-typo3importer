@@ -445,12 +445,12 @@ HTML;
           if (isset($obj)) {
             $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
             $content = str_replace('link ' . $linkID, $replace_link_string, $content);
-            echo $replace_link_string . '</br>';
+            //echo $replace_link_string . '</br>';
           }
         } else {
           $replace_link_string = 'a href="' . $linkID . '"';
           $content = str_replace('link ' . $linkID, $replace_link_string, $content);
-          echo $replace_link_string . '</br>';
+          //echo $replace_link_string . '</br>';
         }
       }
 
