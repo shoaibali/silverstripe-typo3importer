@@ -20,11 +20,11 @@ class Typo3Importer extends Page_Controller {
     parent::init();
     if(!Permission::check('ADMIN')) Security::permissionFailure();
   }
-  
+
   function Title() {
     return "Typo3 Importer";
   }
-  
+
   function Content() {
     $msg = <<<HTML
     <p>This tool will let you migrate site structure and contents from a typo3 uncompressed in to SilverStripe:</p>
@@ -66,7 +66,7 @@ HTML;
 
      return $msg;
   }
-  
+
   function Form() {
     $deleteExistingCheckBox = new CheckboxField("DeleteExisting", "Clear out all existing Typo3 Imported content?");
     $deleteExistingCheckBox->setValue(TRUE);
@@ -77,7 +77,7 @@ HTML;
 
     // No need to publish if some are already.
     //if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
-    
+
 
     return new Form($this, "Form", new FieldList(
       $deleteExistingCheckBox,
@@ -86,7 +86,7 @@ HTML;
       new FormAction("bulkimport", "Being Migration")
     ));
   }
-  
+
   function bulkimport($data, $form) {
 
      if(isset($data['DeleteExisting']) && $data['DeleteExisting'])
@@ -123,9 +123,9 @@ HTML;
       $level = 0; // counter for depth levels
       $parentRefs = array(); // array to store parent id references
 
-      $iterator = new RecursiveArrayIterator(array_filter($site_tree)); 
-      //iterator_apply($iterator, self::migrate($iterator, $level, $count, $parentRefs); 
-      self::migrate($iterator, $level, $count, $parentRefs); 
+      $iterator = new RecursiveArrayIterator(array_filter($site_tree));
+      //iterator_apply($iterator, self::migrate($iterator, $level, $count, $parentRefs);
+      self::migrate($iterator, $level, $count, $parentRefs);
 
       // publish all pages
       if( isset($data['PublishAll']) && $data['PublishAll'] ) {
@@ -146,10 +146,9 @@ HTML;
       self::publishAllTypo3Pages();
     }
 
-    
-    //Director::redirect($this->Link() . 'complete');   
+    //Director::redirect($this->Link() . 'complete');
   }
-  
+
   function complete() {
     return array(
       "Content" => "<p>Thanks! Your site tree & content has been imported.</p>",
@@ -174,7 +173,7 @@ HTML;
       foreach($Typo3Pages as $Typo3Page){
         $Typo3Page->delete();
       }
-      
+
       Versioned::reading_stage('Stage');
       // get all Live Typo3Page pages in Stage mode and delete them
       $Typo3Pages = Typo3Page::get();
@@ -222,12 +221,12 @@ HTML;
     return $sub_tree;
   }
 
-  private static function migrate($iterator, $level, &$count, &$parentRefs) { 
-    while ( $iterator->valid() ) { 
+  private static function migrate($iterator, $level, &$count, &$parentRefs) {
+    while ( $iterator->valid() ) {
         if ( $iterator->hasChildren() ) {
             self::migrate($iterator->getChildren(), $level, $count, $parentRefs);
 
-        } else { 
+        } else {
 
             if( ($iterator->current() !== "") ){
 
@@ -257,7 +256,7 @@ HTML;
                 $newPage->Typo3PID = $parentID;
                 $newPage->Title = $title;
 
-                
+
                 if(isset($bodytext)){
                   //var_dump($bodytext);
                 }
@@ -271,7 +270,7 @@ HTML;
                 if($level > 0) $newPage->ParentID = $parentRefs[$level-1];
 
 
-                // echo "(" . $level . ")" . " <strong>ParentID</strong> => " . $parentID . 
+                // echo "(" . $level . ")" . " <strong>ParentID</strong> => " . $parentID .
                 //      " <strong>UID</strong> => " . $uID .
                 //      " <strong>TITLE</strong> => " . $title .  PHP_EOL . "<br/>";
 
@@ -287,7 +286,7 @@ HTML;
                 for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
                 if(!SapphireTest::is_running_test())
-                   echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+                  echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
                 // Memory cleanup
@@ -301,8 +300,8 @@ HTML;
 
               $count++;  // counter for each element in array
             }
-        } 
-      $iterator->next();     
+        }
+      $iterator->next();
     }
   }
 
@@ -325,7 +324,7 @@ HTML;
     $node_uid = (string) $node->uid;
     // TODO Skip hidden content see getContent:$hidden
     if(!empty($node_uid)){
-      $description = $xml->xpath($description_xpath); 
+      $description = $xml->xpath($description_xpath);
       $description = (string) $description[0];
     }
     return $description;
@@ -340,7 +339,7 @@ HTML;
     // TODO maybe do some content processing here i.e remove or reconstruct links and strip html tags etc.
     if(!empty($node_uid)){
       $content = $xml->xpath($content_xpath);
-      foreach($content as $ck){ 
+      foreach($content as $ck){
 
         // we are going to skip all hidden content
         $hidden =  $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='hidden']");
@@ -424,7 +423,7 @@ HTML;
 
     return $pid;
   }
-  
+
   private static function processInternalLinks(){
     # Get all Typo3Pages
     //Versioned::reading_stage('Live');
@@ -442,14 +441,16 @@ HTML;
 
         if (is_numeric($linkID)) {
           $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
-          // Skip links that are not in the SilverStripe
+          // Skip links that are not in SilverStripe
           if (isset($obj)) {
             $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
             $content = str_replace('link ' . $linkID, $replace_link_string, $content);
+            echo $replace_link_string . '</br>';
           }
         } else {
           $replace_link_string = 'a href="' . $linkID . '"';
           $content = str_replace('link ' . $linkID, $replace_link_string, $content);
+          echo $replace_link_string . '</br>';
         }
       }
 
@@ -531,7 +532,7 @@ HTML;
     foreach($document_link as $dl){
       preg_match('/fileadmin[^>]*/', $dl , $document_path);
       // TODO right now we are just doing href, this might need to be re-done using silverstripe
-      // File->ID instead which means this method will need to be altered and called in post 
+      // File->ID instead which means this method will need to be altered and called in post
       // processing, for now href= links to documents should work.
       $document_link = str_replace($document_path, 'href="/assets/'.$document_path[0].'"', $dl);
     }
