@@ -194,8 +194,16 @@ HTML;
     $content_string = "";
 
     foreach($content_array as $c => $v) {
+      // Body text may contain the header
+      // so read the first line of the body text and only print
+      // if it is different from the header to avoid doubling up
+      $first_line =  strip_tags(strtok($v["bodytext"], "\n"));
       // silly idea to add <h2> tags
+      if (strcmp($first_line, $v['header']) !== 0) {
       $content_string .= "<h2>" . $v["header"] ."</h2>" . $v["bodytext"];
+      } else {
+        $content_string .= $v["bodytext"];
+      }
     }
 
     $sub_tree['content'] = $content_string;
