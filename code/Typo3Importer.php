@@ -146,7 +146,6 @@ HTML;
         self::publishAllTypo3Pages();
       }
 
-    
     //Director::redirect($this->Link() . 'complete');   
   }
   
@@ -287,7 +286,7 @@ HTML;
                 for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
                 if(!SapphireTest::is_running_test())
-                  // echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+                  echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
                 // Memory cleanup
@@ -413,15 +412,24 @@ HTML;
 
     foreach($Typo3Pages as $Typo3Page){
       $content = $Typo3Page->Content;
-      preg_match_all('/link ([\d]+)/', $content , $matches);
+      preg_match_all('/link ([^>]*)/', $content , $matches);
+      $matches = array_pop($matches);
 
-      foreach ($matches[1] as $linkID) {
-        $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
-        // Skip links that are not in the SilverStripe
-        if (isset($obj)) {
-          $orig_link_string = 'link ' . (string)$linkID;
-          $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
-          $content = str_replace($orig_link_string, $replace_link_string, $content);
+      foreach ($matches as $linkID) {
+        // remove anchors from $linkID
+        $linkID = explode('#', $linkID);
+        $linkID = (string)$linkID[0];
+
+        if (is_numeric($linkID)) {
+          $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
+          // Skip links that are not in the SilverStripe
+          if (isset($obj)) {
+            $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+            $content = str_replace('link ' . $linkID, $replace_link_string, $content);
+          }
+        } else {
+          $replace_link_string = 'a href="' . $linkID . '"';
+          $content = str_replace('link ' . $linkID, $replace_link_string, $content);
         }
       }
 
