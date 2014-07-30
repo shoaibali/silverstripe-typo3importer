@@ -447,17 +447,8 @@ HTML;
 
       // loop over all links
       foreach ($iterator as $link_data) {
-        $link_location = $link_data[0];
+        $link_location = self::santizeLinkLocation($link_data[0]);
         $link_title = $link_data[1];
-
-        // if $link_location matches any of the following patterns
-        // example 1: 4662#13992
-        // example 2: 2781 http://www.careers.govt.nz/education-and-training/workplace-training-and-apprenticeships/nz-apprenticeships/
-        // example 3: 3351 _top
-        // then extract the link_location
-        if (preg_match_all('/^([\d]+)(?:#|\s+)(?:.+)/', $link_location, $link_location_content)) {
-          $link_location = $link_location_content[1][0];
-        }
 
         if (is_numeric($link_location)) {
           $obj = Typo3Page::get()->filter(array('Typo3UID' => $link_location))->First();
@@ -564,6 +555,44 @@ HTML;
     return '<img src="/fileadmin/' . $img_path . '" alt="'. $img_alt .'" /><div class="caption">' . $img_cap . '</div>';
   }
 
+  private static function santizeLinkLocation($link_location) {
+    // if $link_location matches any of the following patterns
+    // example 1: 4662#13992
+    // example 2: 2781 http://www.careers.govt.nz/education-and-training/workplace-training-and-apprenticeships/nz-apprenticeships/
+    // example 3: 3351 _top
+    // then extract the link_location
+    if (preg_match_all('/^([\d]+)(?:#|\s+)(?:.+)/', $link_location, $link_location_content))
+      $link_location = $link_location_content[1][0];
+
+    return $link_location;
+  }
+
+  private static function extractLinksData($content) {
+    // get all the lines that match format: <link typo3uid/link>Title</link>
+    preg_match_all('/<link ([^>]+)>(.+?)<\/link>/', $content , $matches);
+    return array(array_pop($matches), array_pop($matches)); // return $titles, $links
+  }
+
+  private static function linkToSSInternalID($content, $link_location, $obj) {
+    $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
+    return $content;
+  }
+
+  private static function addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title) {
+    $broken_links_page = $_SERVER['HTTP_HOST'] . $Typo3Page->Link();
+    $broken_links[$broken_links_page][] = array($link_location, $link_title);
+    return $broken_links;
+  }
+
+  private static function reconstructLink($content, $link_location) {
+    // if there is a whitespace in the link, we don't care anything after it
+    list($link_location) = explode(' ', $link_location);
+    $replace_link_string = 'a href="' . $link_location . '"';
+    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
+    return $content;
+  }
+
   private static function brokenLinksReport($broken_links) {
     echo '<h3> BROKEN LINKS REPORT </h3>';
     echo '<table border=1 cellspacing=0 cellpading=10 width=100%>';
@@ -593,31 +622,5 @@ HTML;
       echo '</tr>';
     }
     echo '</table>';
-  }
-
-  private static function extractLinksData($content) {
-    // get all the lines that match format: <link typo3uid/link>Title</link>
-    preg_match_all('/<link ([^>]+)>(.+?)<\/link>/', $content , $matches);
-    return array(array_pop($matches), array_pop($matches)); // return $titles, $links
-  }
-
-  private static function linkToSSInternalID($content, $link_location, $obj) {
-    $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
-    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
-    return $content;
-  }
-
-  private static function addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title) {
-    $broken_links_page = $_SERVER['HTTP_HOST'] . $Typo3Page->Link();
-    $broken_links[$broken_links_page][] = array($link_location, $link_title);
-    return $broken_links;
-  }
-
-  private static function reconstructLink($content, $link_location) {
-    // if there is a whitespace in the link, we don't care anything after it
-    list($link_location) = explode(' ', $link_location);
-    $replace_link_string = 'a href="' . $link_location . '"';
-    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
-    return $content;
   }
 }
