@@ -74,6 +74,8 @@ HTML;
     $publishAllCheckBox = new CheckboxField("PublishAll", "Publish everything after the import?");
     $publishAllCheckBox->setValue(TRUE);
 
+    $showBrokenLinksCheckBox = new CheckboxField("ShowBrokenLinksReport", "Generate the broken links report?");
+    $showBrokenLinksCheckBox->setValue(TRUE);
 
     // No need to publish if some are already.
     //if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
@@ -81,7 +83,8 @@ HTML;
 
     return new Form($this, "Form", new FieldList(
       $deleteExistingCheckBox,
-      $publishAllCheckBox
+      $publishAllCheckBox,
+      $showBrokenLinksCheckBox
     ), new FieldList(
       new FormAction("bulkimport", "Being Migration")
     ));
@@ -139,7 +142,10 @@ HTML;
     }
 
     // Rewrite Typo3 links into SS links
-    self::processInternalLinks();
+    $broken_links = self::processLinks();
+
+    if( isset($data['ShowBrokenLinksReport']) && $data['ShowBrokenLinksReport'] )
+      self::brokenLinksReport($broken_links);
 
     // publish all pages
     if( isset($data['PublishAll']) && $data['PublishAll'] ) {
@@ -424,33 +430,46 @@ HTML;
     return $pid;
   }
 
-  private static function processInternalLinks(){
+  private static function processLinks(){
     # Get all Typo3Pages
     //Versioned::reading_stage('Live');
     $Typo3Pages = Typo3Page::get();
-
+    $broken_links = array();
     foreach($Typo3Pages as $Typo3Page){
       $content = $Typo3Page->Content;
-      preg_match_all('/link ([^>]*)/', $content , $matches);
-      $matches = array_pop($matches);
 
-      foreach ($matches as $linkID) {
-        // remove anchors from $linkID
-        $linkID = explode('#', $linkID);
-        $linkID = (string)$linkID[0];
+      list($titles, $links) = self::extractLinksData($content);
 
-        if (is_numeric($linkID)) {
-          $obj = Typo3Page::get()->filter(array('Typo3UID' => $linkID))->First();
+      // create a new array iterator to combine links and titles to loop through
+      $iterator = new MultipleIterator();
+      $iterator->attachIterator(new ArrayIterator($links));
+      $iterator->attachIterator(new ArrayIterator($titles));
+
+      // loop over all links
+      foreach ($iterator as $link_data) {
+        $link_location = $link_data[0];
+        $link_title = $link_data[1];
+
+        // if $link_location matches any of the following patterns
+        // example 1: 4662#13992
+        // example 2: 2781 http://www.careers.govt.nz/education-and-training/workplace-training-and-apprenticeships/nz-apprenticeships/
+        // example 3: 3351 _top
+        // then extract the link_location
+        if (preg_match_all('/^([\d]+)(?:#|\s+)(?:.+)/', $link_location, $link_location_content)) {
+          $link_location = $link_location_content[1][0];
+        }
+
+        if (is_numeric($link_location)) {
+          $obj = Typo3Page::get()->filter(array('Typo3UID' => $link_location))->First();
+
           // Skip links that are not in SilverStripe
           if (isset($obj)) {
-            $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
-            $content = str_replace('link ' . $linkID, $replace_link_string, $content);
-            //echo $replace_link_string . '</br>';
+            $content = self::linkToSSInternalID($content, $link_location, $obj);
+          } else {
+            $broken_links = self::addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title);
           }
         } else {
-          $replace_link_string = 'a href="' . $linkID . '"';
-          $content = str_replace('link ' . $linkID, $replace_link_string, $content);
-          //echo $replace_link_string . '</br>';
+          $content = self::reconstructLink($content, $link_location);
         }
       }
 
@@ -459,6 +478,7 @@ HTML;
       $Typo3Page->Content = $content;
       $Typo3Page->write();
     }
+    return $broken_links;
   }
 
   private static function fixQuoteText($pi_flexform) {
@@ -544,6 +564,60 @@ HTML;
     return '<img src="/fileadmin/' . $img_path . '" alt="'. $img_alt .'" /><div class="caption">' . $img_cap . '</div>';
   }
 
+  private static function brokenLinksReport($broken_links) {
+    echo '<h3> BROKEN LINKS REPORT </h3>';
+    echo '<table border=1 cellspacing=0 cellpading=10 width=100%>';
+    echo '<tr>';
+    echo '<th style="width: 40%">Page</th>';
+    echo '<th style="width: 60%">';
+    echo '<table width=100%>';
+    echo '<th style="width: 10%; text-alight: left">Typo3UID</th>';
+    echo '<th style="width: 90%; text-alight: left">Link Title</th>';
+    echo '</th>';
+    echo '</table>';
+    echo '</tr>';
+    foreach ($broken_links as $broken_link => $values) {
+      echo '<tr>';
+      echo '<td><a href="' . $broken_link . '"/>' . $broken_link . '</td>';
+      echo '<td>';
+      echo '<table cellspacing=0 cellpading=0 width=100%>';
+      foreach ($values as $value) {
+        list($link_location, $link_title) = $value;
+        echo '<tr>';
+        echo '<td style="width: 10%">' . $link_location . '</td>';
+        echo '<td style="width: 90%">' . $link_title . '</td>';
+        echo '</tr>';
+      }
+      echo '</table>';
+      echo '</td>';
+      echo '</tr>';
+    }
+    echo '</table>';
+  }
 
+  private static function extractLinksData($content) {
+    // get all the lines that match format: <link typo3uid/link>Title</link>
+    preg_match_all('/<link ([^>]+)>(.+?)<\/link>/', $content , $matches);
+    return array(array_pop($matches), array_pop($matches)); // return $titles, $links
+  }
 
+  private static function linkToSSInternalID($content, $link_location, $obj) {
+    $replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
+    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
+    return $content;
+  }
+
+  private static function addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title) {
+    $broken_links_page = $_SERVER['HTTP_HOST'] . $Typo3Page->Link();
+    $broken_links[$broken_links_page][] = array($link_location, $link_title);
+    return $broken_links;
+  }
+
+  private static function reconstructLink($content, $link_location) {
+    // if there is a whitespace in the link, we don't care anything after it
+    list($link_location) = explode(' ', $link_location);
+    $replace_link_string = 'a href="' . $link_location . '"';
+    $content = str_replace('link ' . $link_location, $replace_link_string, $content);
+    return $content;
+  }
 }
