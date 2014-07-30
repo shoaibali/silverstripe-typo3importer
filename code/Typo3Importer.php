@@ -110,7 +110,7 @@ HTML;
 
 
       if(!SapphireTest::is_running_test())
-        echo "Procesing file => " . $file . PHP_EOL . "<br/>";
+        echo "Processing file => " . $file . PHP_EOL . "<br/>";
 
       $root_tree = $xml->header->pagetree->node;
       $site_tree = array();
@@ -465,6 +465,7 @@ HTML;
 
     $decoded_xhtml = html_entity_decode( $pi_flexform, ENT_QUOTES, "UTF-8");
 
+    // TODO all replacements can be added to an array and just done once only.
     $decoded_xhtml = str_replace("&", "&amp;", $decoded_xhtml);
     $decoded_xhtml = str_replace("<br>", "", $decoded_xhtml);
     $decoded_xhtml = str_replace("<br />", "", $decoded_xhtml);
@@ -472,6 +473,18 @@ HTML;
     $decoded_xhtml = str_replace("</ul>", "", $decoded_xhtml);
     $decoded_xhtml = str_replace("<li>", "", $decoded_xhtml);
     $decoded_xhtml = str_replace("</li>", "", $decoded_xhtml);
+    $decoded_xhtml = str_replace("<p/>", "</p>", $decoded_xhtml);
+
+    // fix and poorly formed <link> tags
+    // TODO use extractLinkData method
+    preg_match('/<link ([^>]+)>(.+?)<\/link>/', $decoded_xhtml , $matches);
+    $matches = array_filter($matches);
+    if(!empty($matches)) {
+      $decoded_xhtml = str_replace($matches[0], '<a href="'.$matches[1] . '">'. $matches[2] . '</a>', $decoded_xhtml);
+    }
+
+
+    //$decoded_xhtml = str_replace("");
 
     $pi_flexform_xml = simplexml_load_string($decoded_xhtml);
 
