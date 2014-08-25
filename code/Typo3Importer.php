@@ -25,6 +25,11 @@ class Typo3Importer extends Page_Controller {
 		return "Typo3 Importer";
 	}
 
+	function index() {
+		return $this->renderWith(array("Page", "Typo3Importer"));
+	}
+
+
 	function Content() {
 		$msg = <<<HTML
 		<p>This tool will let you migrate site structure and contents from a typo3 uncompressed in to SilverStripe:</p>
@@ -78,7 +83,7 @@ HTML;
 		$showBrokenLinksCheckBox->setValue(TRUE);
 
 		// No need to publish if some are already.
-		//if(Versioned::get_by_stage('Typo3Page', 'Live')->Count() > 0)
+		//if(Versioned::get_by_stage('ContentGenericPage', 'Live')->Count() > 0)
 
 
 		return new Form($this, "Form", new FieldList(
@@ -86,14 +91,20 @@ HTML;
 			$publishAllCheckBox,
 			$showBrokenLinksCheckBox
 		), new FieldList(
-			new FormAction("bulkimport", "Being Migration")
+			new FormAction("bulkimport", "Begin Migration")
 		));
 	}
 
 	function bulkimport($data, $form) {
 
-		 if(isset($data['DeleteExisting']) && $data['DeleteExisting'])
-			 self::deleteAllTypo3Pages();
+		 if(isset($data['DeleteExisting']) && $data['DeleteExisting']) {
+			self::deleteAllContentGenericPages();
+			DB::query('delete from Block');
+			DB::query('delete from Page_Blocks');
+			DB::query('delete from FeaturedLinksBox');
+			DB::query('delete from FeaturedLink');
+
+		 }
 
 		$files = array();
 
@@ -130,27 +141,27 @@ HTML;
 			//iterator_apply($iterator, self::migrate($iterator, $level, $count, $parentRefs);
 			self::migrate($iterator, $level, $count, $parentRefs);
 
-			// publish all pages
-			if( isset($data['PublishAll']) && $data['PublishAll'] ) {
-				self::publishAllTypo3Pages();
-			}
-
 			// cleanup memory
 			unset($iterator);
 			unset($site_tree);
 			unset($parentRefs);
 		}
 
-		// Rewrite Typo3 links into SS links
-		$broken_links = self::processLinks();
-
-		if( isset($data['ShowBrokenLinksReport']) && $data['ShowBrokenLinksReport'] )
-			self::brokenLinksReport($broken_links);
+		/****************    POST PROCESSING OF CONTENT *********************/
 
 		// publish all pages
 		if( isset($data['PublishAll']) && $data['PublishAll'] ) {
-			self::publishAllTypo3Pages();
+			self::publishAllContentGenericPages();
 		}
+
+		// re-link all the ContentBlocks to their respective ContentGenericPages
+		 self::linkConentBlocksToContentGenericPages();
+
+		// create featuredlinksbox
+		self::createFeaturedLinksBox();
+
+		//self::processRelatedLinks();	
+		//self::processLinks();	
 
 		//Director::redirect($this->Link() . 'complete');
 	}
@@ -162,69 +173,64 @@ HTML;
 		);
 	}
 
-	private static function publishAllTypo3Pages(){
-			Versioned::reading_stage('Stage');
-			$Typo3Pages = Typo3Page::get();
-			foreach($Typo3Pages as $Typo3Page){
-				$Typo3Page->publish('Stage', 'Live');
-			}
+	private static function createFeaturedLinksBox(){
+		$blocks = DataObject::get('Block');
 
+		foreach($blocks as $b){
+				if ($t3page = ContentGenericPage::get()->filter(array("Typo3UID" => $b->Typo3PID))->First()) {
+					// also create FeaturedLinksBox with Related links
+					if( stripos($b->Heading, "Related links") !== FALSE ) {
+							$featuredLinksBox =  new FeaturedLinksBox();
+							$featuredLinksBox->HeadingTitle = "Related links";
+							$t3page->FeaturedLinksBoxes()->add($featuredLinksBox);
+
+							list($titles, $links) = self::extractLinksData($b->Content);
+
+							$iterator = new MultipleIterator();
+							$iterator->attachIterator(new ArrayIterator($links));
+							$iterator->attachIterator(new ArrayIterator($titles));
+
+							// loop over all links
+							foreach ($iterator as $link_data) {
+								$link_location = self::santizeLinkLocation($link_data[0]);
+								$link_title = $link_data[1];
+
+								if (is_numeric($link_location)) {
+									$contentPage = ContentGenericPage::get()->filter(array('Typo3UID' => $link_location))->First();
+									//echo "Found $link_location <Br/>";
+									if(isset($contentPage)) {
+										 $featuredLink = new FeaturedLink();
+										 $featuredLink->Title = $link_title;
+										 $featuredLink->Type  = 'SiteTree';
+										 $featuredLink->URL   = $contentPage->URLSegment;
+										 $featuredLink->SiteTreeID = $contentPage->ID;
+										$featuredLinksBox->FeaturedLinks()->add($featuredLink);
+									} else {
+										echo "Could not link $link_location - $link_title <br/>";
+									}
+								}
+							}
+					}
+			}
+		}
 	}
-	private static function deleteAllTypo3Pages(){
 
-			// TODO use Versioned::get_by_stage('MyClass', 'Live')->removeAll();
-			Versioned::reading_stage('Live');
-			// get all Live Typo3Page pages in Live mode and delete them
-			$Typo3Pages = Typo3Page::get();
-			foreach($Typo3Pages as $Typo3Page){
-				$Typo3Page->delete();
-			}
 
-			Versioned::reading_stage('Stage');
-			// get all Live Typo3Page pages in Stage mode and delete them
-			$Typo3Pages = Typo3Page::get();
-			foreach($Typo3Pages as $Typo3Page){
-				$Typo3Page->delete();
-			}
-	}
 
-	private static function buildTree($root, &$site_tree, $full_xml) {
-		$sub_tree = array();
-		$root_uid = (string) $root->uid;
+	private static function linkConentBlocksToContentGenericPages(){
+		$blocks = DataObject::get('Block');
 
-		$sub_tree['uid'] = $root_uid;
-		$sub_tree['title'] = self::getTitle($root, $full_xml);
-		$sub_tree['description'] = self::getDescription($root, $full_xml);
-		$content_array = self::getContent($root, $full_xml);
-		$content_string = "";
+		foreach($blocks as $b){
+				if ($t3page = ContentGenericPage::get()->filter(array("Typo3UID" => $b->Typo3PID))->First()) {
+					$t3page->Blocks()->add($b);
+				//echo "Block with Typo3UID " . $b->Typo3UID . " is associated with T3PageID =>" .$t3page->ID . "<br/>" . PHP_EOL;
 
-		foreach($content_array as $c => $v) {
-			// Body text may contain the header
-			// so read the first line of the body text and only print
-			// if it is different from the header to avoid doubling up
-			$first_line =  strip_tags(strtok($v["bodytext"], "\n"));
-			// silly idea to add <h2> tags
-			if (strcmp($first_line, $v['header']) !== 0) {
-			$content_string .= "<h2>" . $v["header"] ."</h2>" . $v["bodytext"];
 			} else {
-				$content_string .= $v["bodytext"];
+				echo "Failed to find Block with Typo3UID " . $b->Typo3UID . ", T3PagePID =>" .$b->Typo3PID . "<br/>" . PHP_EOL;
+
 			}
 		}
 
-		$sub_tree['content'] = $content_string;
-		 // this (pid) must remain the very last thing that gets added to array
-		$sub_tree['pid'] = self::getPID($root, $full_xml);
-
-		// If there is children
-		if (!empty($root->children()->node)) {
-			foreach($root->children()->node as $child){
-				$child_uid = (string) $child->uid;
-				$sub_tree['children'][$child_uid] = self::buildTree($child, $site_tree, $full_xml);
-			}
-
-			$site_tree[$root_uid] = $sub_tree;
-		}
-		return $sub_tree;
 	}
 
 	private static function migrate($iterator, $level, &$count, &$parentRefs) {
@@ -252,12 +258,24 @@ HTML;
 								$bodytext = $iterator->current();
 							}
 
+							if( $iterator->key() == "ctype" ){
+								$ctype = $iterator->current();
+							}
+
 							if( $iterator->key() == "pid" ) {
 
 								$parentID = $iterator->current();
 
-								$newPage = new Typo3Page();
-								$newPage->IsTypo3 = TRUE;
+								$newPage = new ContentGenericPage();
+
+								if($level == 0)
+									$newPage = new ContentLandingPage();
+								if($level == 1)
+									$newPage = new ContentHolderPage();
+								if($level >= 2)
+									$newPage = new ContentTopicPage();
+
+
 								$newPage->Typo3UID = $uID;
 								$newPage->Typo3PID = $parentID;
 								$newPage->Title = $title;
@@ -266,9 +284,10 @@ HTML;
 								if(isset($bodytext)){
 									//var_dump($bodytext);
 								}
+								$newPage->Description = ( isset($description) )? $description : "";
 
-								$newPage->Content = ( isset($description) )? $description : "";
-								$newPage->Content .= ( isset($bodytext) ) ? $bodytext : "";
+								//$newPage->Content = ( isset($description) )? $description : "";
+								//$newPage->Content .= ( isset($bodytext) ) ? $bodytext : "";
 
 								$newPage->URLSegment = NULL;
 
@@ -277,8 +296,8 @@ HTML;
 
 
 								// echo "(" . $level . ")" . " <strong>ParentID</strong> => " . $parentID .
-								//      " <strong>UID</strong> => " . $uID .
-								//      " <strong>TITLE</strong> => " . $title .  PHP_EOL . "<br/>";
+								//       " <strong>UID</strong> => " . $uID .
+								//       " <strong>TITLE</strong> => " . $title .  PHP_EOL . "<br/>";
 
 
 								// Don't write the page until we have Title, Content and ParentID
@@ -291,8 +310,8 @@ HTML;
 								// with errors
 								for($i=sizeof($parentRefs)-1;$i>$level;$i--) unset($parentRefs[$i]);
 
-								if(!SapphireTest::is_running_test())
-									echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
+								//if(!SapphireTest::is_running_test())
+								//	echo"<li>Written #$newPage->ID: $newPage->Title (child of $newPage->ParentID)</li>";
 
 
 								// Memory cleanup
@@ -309,6 +328,45 @@ HTML;
 				}
 			$iterator->next();
 		}
+	}
+
+	private static function buildTree($root, &$site_tree, $full_xml) {
+		$sub_tree = array();
+		$root_uid = (string) $root->uid;
+
+		$sub_tree['uid'] = $root_uid;
+		$sub_tree['title'] = self::getTitle($root, $full_xml);
+		$sub_tree['description'] = self::getDescription($root, $full_xml);
+		$content_array = self::getContent($root, $full_xml);
+		$content_string = "";
+
+		foreach($content_array as $c => $v) {
+			// Body text may contain the header
+			// so read the first line of the body text and only print
+			// if it is different from the header to avoid doubling up
+			$first_line =  strip_tags(strtok($v["bodytext"], "\n"));
+			// silly idea to add <h2> tags
+			if (strcmp($first_line, $v['header']) !== 0) {
+				$content_string .= "<h2>" . $v["header"] ."</h2>" . $v["bodytext"];
+			} else {
+				$content_string .= $v["bodytext"];
+			}
+		}
+
+		$sub_tree['content'] = $content_string;
+		 // this (pid) must remain the very last thing that gets added to array
+		$sub_tree['pid'] = self::getPID($root, $full_xml);
+
+		// If there is children
+		if (!empty($root->children()->node)) {
+			foreach($root->children()->node as $child){
+				$child_uid = (string) $child->uid;
+				$sub_tree['children'][$child_uid] = self::buildTree($child, $site_tree, $full_xml);
+			}
+
+			$site_tree[$root_uid] = $sub_tree;
+		}
+		return $sub_tree;
 	}
 
 	private static function getTitle($node, $xml){
@@ -337,74 +395,96 @@ HTML;
 	}
 
 	private static function getContent($node, $xml){
+
 		$content_xpath = "/T3RecordDocument/header/pid_lookup/page_contents[@index='".(string) $node->uid . "']/table[@index='tt_content']/item";
 		$content = "";
 		$node_uid = (string) $node->uid;
+		$tt_content_xpath = "/T3RecordDocument/records/tablerow[@index='tt_content:";
+
 		$content_complete  = array(); // this array will hold all item id's for their respective contents
 
-		// TODO maybe do some content processing here i.e remove or reconstruct links and strip html tags etc.
+
+
 		if(!empty($node_uid)){
 			$content = $xml->xpath($content_xpath);
 			foreach($content as $ck){
+				
+				$ck_index = (string) $ck['index'];
 
 				// we are going to skip all hidden content
-				$hidden =  $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='hidden']");
+				$hidden =  $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='hidden']");
 
 				// ctype can be {div, html, text, textpic, image, list, menu}
-				$ctype =  $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='CType']");
+				$ctype =  $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='CType']");
 
 				if( !(string)$hidden[0] ) {
-					$header = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='header']");
+					$header = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='header']");
 					$header = (string) $header[0];
 
-					$bodytext = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='bodytext']");
+					$bodytext = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='bodytext']");
 
 					$bodytext = (string) $bodytext[0];
 					$ctype = (string) $ctype[0];
 
+
 					// look for block quote pi_flexform
 					if( empty($bodytext) ){
-						$pi_flexform = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='pi_flexform']");
+						$pi_flexform = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='pi_flexform']");
 						$pi_flexform = (string) $pi_flexform[0];
 						if ( !empty($pi_flexform) ) {
 							$bodytext = self::fixQuoteText($pi_flexform);
 						}
 					}
 
-					if( $ctype == "image" ){
-						// get the path for image
-						$image_file_path = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='tx_emreferences_filereferences']");
-						$image_file_alt_text = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='altText']");
-						$image_file_caption = $xml->xpath("/T3RecordDocument/records/tablerow[@index='tt_content:".(string)$ck["index"]."']/fieldlist/field[@index='imagecaption']");
+					// if( $ctype == "image" ){
+					// 	// get the path for image
+					// 	$image_file_path = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='tx_emreferences_filereferences']");
+					// 	$image_file_alt_text = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='altText']");
+					// 	$image_file_caption = $xml->xpath($tt_content_xpath.$ck_index."']/fieldlist/field[@index='imagecaption']");
 
-						$bodytext = self::buildImageWithCaption((string) $image_file_path[0], 
-																										(string) $image_file_alt_text[0], 
-																										(string) $image_file_caption[0]);
+					// 	$bodytext = self::buildImageWithCaption((string) $image_file_path[0], 
+					// 																					(string) $image_file_alt_text[0], 
+					// 																					(string) $image_file_caption[0]);
 
-					}
+					// }
 
 
 					$bodytext = html_entity_decode( (string) $bodytext, ENT_QUOTES, "UTF-8");
 
-					// re-link images to /assets directory
-					preg_match('/<img[^>]*>/', $bodytext , $images);
 
-					if( !empty($images[0])) {
-						// rewrite the source of image relative to assets directory in SS
-						$imagepath = self::fixImagePath($images[0]);
-						$bodytext = str_replace($images[0], $imagepath, $bodytext);
-					}
+					// insert in to ContentBlocks 
+					$content_block = new Block();
+					$content_block->Typo3UID 	= $ck_index;
+					$content_block->Typo3PID 	= $node_uid;
+					$content_block->Heading 	= $header;
+					$content_block->CType 		= $ctype;
+					$content_block->Content 	= $bodytext;
+					$content_block->write();
+
+
+					// echo "Created block '$header' UID $ck_index PID $node_uid<br/>" . PHP_EOL;
+
+
+
+					// re-link images to /assets directory
+					// preg_match('/<img[^>]*>/', $bodytext , $images);
+
+					// if( !empty($images[0])) {
+					// 	// rewrite the source of image relative to assets directory in SS
+					// 	$imagepath = self::fixImagePath($images[0]);
+					// 	$bodytext = str_replace($images[0], $imagepath, $bodytext);
+					// }
 
 					// replace all ###CMS_URL###
-					$bodytext = str_replace("###CMS_URL###", "/", $bodytext);
+					// $bodytext = str_replace("###CMS_URL###", "/", $bodytext);
 
 					// re-link documents to /assets directory
-					preg_match_all('/<link fileadmin[^>]*>(.*?)<\/link>/', $bodytext , $links);
+					// preg_match_all('/<link fileadmin[^>]*>(.*?)<\/link>/', $bodytext , $links);
 
-					if( !empty($links[0]) ){
-						$document_links = self::fixDocumentPath($links[0]);
-						$bodytext = str_replace($links[0], $document_links, $bodytext);
-					}
+					// if( !empty($links[0]) ){
+					// 	$document_links = self::fixDocumentPath($links[0]);
+					// 	$bodytext = str_replace($links[0], $document_links, $bodytext);
+					// }
 
 					$content_complete []= array("header" => $header,
 																			"bodytext" => $bodytext);
@@ -414,7 +494,6 @@ HTML;
 		}
 
 		return $content_complete;
-
 	}
 
 	private static function getPID($node, $xml){
@@ -430,15 +509,16 @@ HTML;
 		return $pid;
 	}
 
-	private function processLinks(){
-		# Get all Typo3Pages
-		//Versioned::reading_stage('Live');
-		$Typo3Pages = Typo3Page::get();
-		$broken_links = array();
-		foreach($Typo3Pages as $Typo3Page){
-			$content = $Typo3Page->Content;
 
-			list($titles, $links) = $this->extractLinksData($content);
+	private static function processLinks(){
+		# Get all ContentGenericPages
+		//Versioned::reading_stage('Live');
+		$blocks = Block::get();
+		$broken_links = array();
+		foreach($blocks as $block){
+			$content = $block->Content;
+
+			list($titles, $links) = self::extractLinksData($content);
 
 			// create a new array iterator to combine links and titles to loop through
 			$iterator = new MultipleIterator();
@@ -447,17 +527,18 @@ HTML;
 
 			// loop over all links
 			foreach ($iterator as $link_data) {
-				$link_location = $this->santizeLinkLocation($link_data[0]);
+				$link_location = self::santizeLinkLocation($link_data[0]);
 				$link_title = $link_data[1];
 
 				if (is_numeric($link_location)) {
-					$obj = Typo3Page::get()->filter(array('Typo3UID' => $link_location))->First();
+					$obj = ContentGenericPage::get()->filter(array('Typo3UID' => $link_location))->First();
 
 					// Skip links that are not in SilverStripe
 					if (isset($obj)) {
 						$content = $this->linkToSSInternalID($content, $link_location, $obj);
+
 					} else {
-						$broken_links = $this->addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title);
+						$broken_links = $this->addToBrokenLinks($ContentGenericPage, $broken_links, $link_location, $link_title);
 					}
 				} else {
 					$content = $this->reconstructLink($content, $link_location);
@@ -466,8 +547,8 @@ HTML;
 
 			// replace all the closing link tags with a tags
 			$content = str_replace('/link', '/a', $content);
-			$Typo3Page->Content = $content;
-			$Typo3Page->write();
+			$ContentGenericPage->Content = $content;
+			$ContentGenericPage->write();
 		}
 		return $broken_links;
 	}
@@ -520,13 +601,10 @@ HTML;
 		// TODO there is also @index='otherlinkurl'
 
 		return $quote_picture . $quote_heading . $quote_text  . $quote_name . $quote_occupation;
-
-
 	}
 
 	private static function fixQuoteImagePath($image_path, $alt_text) {
 		return '<img src="/assets/fileadmin/'. $image_path . '" alt="' . $alt_text . '">';
-
 	}
 
 	private static function fixImagePath($img){
@@ -568,7 +646,7 @@ HTML;
 		return '<img src="/fileadmin/' . $img_path . '" alt="'. $img_alt .'" /><div class="caption">' . $img_cap . '</div>';
 	}
 
-	function santizeLinkLocation($link_location) {
+	public static function santizeLinkLocation($link_location) {
 		// if $link_location matches any of the following patterns
 		// example 1: 4662#13992
 		// example 2: 2781 http://www.careers.govt.nz/education-and-training/workplace-training-and-apprenticeships/nz-apprenticeships/
@@ -580,25 +658,25 @@ HTML;
 		return $link_location;
 	}
 
-	function extractLinksData($content) {
+	public static function extractLinksData($content) {
 		// get all the lines that match format: <link typo3uid/link>Title</link>
 		preg_match_all('/<link ([^>]+)>(.+?)<\/link>/', $content , $matches);
 		return array(array_pop($matches), array_pop($matches)); // return $titles, $links
 	}
 
-	function linkToSSInternalID($content, $link_location, $obj) {
+	public static function linkToSSInternalID($content, $link_location, $obj) {
 		$replace_link_string = 'a '. 'href="[sitetree_link, id=' . (string)$obj->ID .']"';
 		$content = str_replace('link ' . $link_location, $replace_link_string, $content);
 		return $content;
 	}
 
-	function addToBrokenLinks($Typo3Page, $broken_links, $link_location, $link_title) {
-		$broken_links_page = $_SERVER['HTTP_HOST'] . $Typo3Page->Link();
+	public static function addToBrokenLinks($ContentGenericPage, $broken_links, $link_location, $link_title) {
+		$broken_links_page = $_SERVER['HTTP_HOST'] . $ContentGenericPage->Link();
 		$broken_links[$broken_links_page][] = array($link_location, $link_title);
 		return $broken_links;
 	}
 
-	function reconstructLink($content, $link_location) {
+	public static function reconstructLink($content, $link_location) {
 		// if there is a whitespace in the link, we don't care anything after it
 		list($cleanedup_link) = explode(' ', $link_location);
 		$replace_link_string = 'a href="' . $cleanedup_link . '"';
@@ -636,4 +714,51 @@ HTML;
 		}
 		echo '</table>';
 	}
+
+
+	private static function publishAllContentGenericPages(){
+			Versioned::reading_stage('Stage');
+			$pagetypes = array("ContentGenericPage", "ContentLandingPage", "ContentHolderPage", "ContentTopicPage");
+			foreach($pagetypes as $pt) {
+				$pages = $pt::get();
+				foreach($pages as $page){
+					$page->publish('Stage', 'Live');
+				}
+			}
+	}
+
+	private static function deleteAllContentGenericPages(){
+
+				// TODO use Versioned::get_by_stage('MyClass', 'Live')->removeAll();
+
+		 		// Versioned::get_by_stage('ContentGenericPage', 'Live')->removeAll();
+		 		// Versioned::get_by_stage('ContentGenericPage', 'Stage')->removeAll();
+
+		 		// Versioned::get_by_stage('ContentLandingPage', 'Live')->removeAll();
+		 		// Versioned::get_by_stage('ContentLandingPage', 'Stage')->removeAll();
+
+		 		// Versioned::get_by_stage('ContentHolderPage', 'Live')->removeAll();
+		 		// Versioned::get_by_stage('ContentHolderPage', 'Stage')->removeAll();
+
+
+		 		// Versioned::get_by_stage('ContentTopicPage', 'Live')->removeAll();
+		 		// Versioned::get_by_stage('ContentTopicPage', 'Stage')->removeAll();
+
+				Versioned::reading_stage('Live');
+				// get all Live ContentGenericPage pages in Live mode and delete them
+				$ContentGenericPages = ContentGenericPage::get();
+				foreach($ContentGenericPages as $ContentGenericPage){
+					$ContentGenericPage->delete();
+				}
+
+				Versioned::reading_stage('Stage');
+				// get all Live ContentGenericPage pages in Stage mode and delete them
+				$ContentGenericPages = ContentGenericPage::get();
+				foreach($ContentGenericPages as $ContentGenericPage){
+					$ContentGenericPage->delete();
+				}
+
+	}
+
+
 }
